@@ -227,6 +227,28 @@ function cjlFitText(el, full, short) {
   var cs = getComputedStyle(el), box = el.clientWidth || parseFloat(cs.width) || 0;
   if (box > 0 && cjlTextWidth(full, cs) > box + 1) el.textContent = short;
 }
+/* Line under the athlete's name: always the full school/gym name. If it is
+   too long for its box the text gets smaller (down to 60%) instead of being cut. */
+function cjlFullText(el, full) {
+  if (typeof el === 'string') el = document.getElementById(el);
+  if (!el) return;
+  full = full == null ? '' : String(full);
+  el.textContent = full;
+  el.style.fontSize = '';
+  var cs = getComputedStyle(el), box = el.clientWidth || parseFloat(cs.width) || 0;
+  if (!box) return;
+  var w = cjlTextWidth(full, cs);
+  if (w > box + 1) {
+    var base = parseFloat(cs.fontSize);
+    el.style.fontSize = Math.max(base * 0.6, Math.floor(base * box / w * 10) / 10) + 'px';
+  }
+}
+/* Team score boxes: always the short name when the team has one (BU, Columbia…). */
+function cjlTeamText(el, full, short) {
+  if (typeof el === 'string') el = document.getElementById(el);
+  if (!el) return;
+  el.textContent = short ? String(short) : (full == null ? '' : String(full));
+}
 /* For names that are auto-shrunk: use the short name if the full one would
    have to shrink below 75% of its normal size. */
 function cjlPickName(full, short, fontCss, boxWidth, letterSpacing) {
@@ -363,14 +385,14 @@ function cjlPickName(full, short, fontCss, boxWidth, letterSpacing) {
     document.getElementById('name2').textContent = state.name2;
     autoScaleName('name1', state.name1);
     autoScaleName('name2', state.name2);
-    cjlFitText('school1', state.school1, state.short1);
-    cjlFitText('school2', state.school2, state.short2);
+    cjlFullText('school1', state.school1);
+    cjlFullText('school2', state.school2);
     document.getElementById('bar1').style.background = state.color1;
     document.getElementById('bar2').style.background = state.color2;
     document.getElementById('team1_bg').style.background = state.color1;
     document.getElementById('team2_bg').style.background = state.color2;
-    cjlFitText('team1_name', state.school1, state.short1);
-    cjlFitText('team2_name', state.school2, state.short2);
+    cjlTeamText('team1_name', state.school1, state.short1);
+    cjlTeamText('team2_name', state.school2, state.short2);
     document.getElementById('pts_red').textContent = state.pts1;
     document.getElementById('pts_blue').textContent = state.pts2;
     document.getElementById('team1_score').textContent = state.teamPts1;
