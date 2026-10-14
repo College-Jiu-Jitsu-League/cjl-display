@@ -140,6 +140,36 @@ html, body {
 <div id="m4_pts_blue" class="el pts-circle" style="left:1788px; width:70px;"></div>
 
 <script>
+/* Short team names: the full name is shown unless it doesn't fit its box,
+   then the short name from Tournament Info (e.g. "BU") is used instead. */
+function cjlTextWidth(text, cs) {
+  var c = window.__cjlCanvas || (window.__cjlCanvas = document.createElement('canvas'));
+  var ctx = c.getContext('2d');
+  ctx.font = cs.fontStyle + ' ' + cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily;
+  var t = cs.textTransform === 'uppercase' ? String(text).toUpperCase() : String(text);
+  return ctx.measureText(t).width + (parseFloat(cs.letterSpacing) || 0) * t.length;
+}
+function cjlFitText(el, full, short) {
+  if (typeof el === 'string') el = document.getElementById(el);
+  if (!el) return;
+  full = full == null ? '' : String(full);
+  el.textContent = full;
+  if (!short || short === full) return;
+  var cs = getComputedStyle(el), box = el.clientWidth || parseFloat(cs.width) || 0;
+  if (box > 0 && cjlTextWidth(full, cs) > box + 1) el.textContent = short;
+}
+/* For names that are auto-shrunk: use the short name if the full one would
+   have to shrink below 75% of its normal size. */
+function cjlPickName(full, short, fontCss, boxWidth, letterSpacing) {
+  full = full == null ? '' : String(full);
+  if (!short || short === full) return full;
+  var c = window.__cjlCanvas || (window.__cjlCanvas = document.createElement('canvas'));
+  var ctx = c.getContext('2d'); ctx.font = fontCss;
+  var w = ctx.measureText(full.toUpperCase()).width + (letterSpacing || 0) * Math.max(0, full.length - 1);
+  return w * 0.75 > boxWidth ? short : full;
+}
+</script>
+<script>
 const SHEET_URL = 'https://script.google.com/macros/s/AKfycbwp2W4G2mYd5cC2e9xBgJ3S_q_3jypZiCpaxI0iF5_1f5XbdLKQQyO65OGZbBScXlddcw/exec';
 const RELAY_URL = 'wss://cjl-relay.onrender.com';
 
@@ -172,22 +202,25 @@ function makeMat(matId) {
   }
 
   function render() {
-    document.getElementById(p+'name1').textContent = state.school1;
-    document.getElementById(p+'name2').textContent = state.school2;
     var n1w = matId===3 ? 250 : 213;
     var n2w = matId===3 ? 215 : 245;
-    autoScaleName(p+'name1', state.school1, 50, 20, n1w);
-    autoScaleName(p+'name2', state.school2, 50, 20, n2w);
+    var big = "900 50px 'Barlow Condensed', sans-serif";
+    var team1 = cjlPickName(state.school1, state.short1, big, n1w, 1.5);
+    var team2 = cjlPickName(state.school2, state.short2, big, n2w, 1.5);
+    document.getElementById(p+'name1').textContent = team1;
+    document.getElementById(p+'name2').textContent = team2;
+    autoScaleName(p+'name1', team1, 50, 20, n1w);
+    autoScaleName(p+'name2', team2, 50, 20, n2w);
     document.getElementById(p+'score1').textContent = state.teamPts1;
     document.getElementById(p+'score2').textContent = state.teamPts2;
     document.getElementById(p+'slash1').style.color = state.color1;
     document.getElementById(p+'slash2').style.color = state.color2;
 
     document.getElementById(p+'name_a').textContent = state.name1;
-    document.getElementById(p+'school_a').textContent = state.school1;
+    cjlFitText(p+'school_a', state.school1, state.short1);
     document.getElementById(p+'bar_a').style.background = state.color1;
     document.getElementById(p+'name_b').textContent = state.name2;
-    document.getElementById(p+'school_b').textContent = state.school2;
+    cjlFitText(p+'school_b', state.school2, state.short2);
     document.getElementById(p+'bar_b').style.background = state.color2;
     autoScaleName(p+'name_a', state.name1, 30, 16, 220);
     autoScaleName(p+'name_b', state.name2, 30, 16, 230);
@@ -225,8 +258,8 @@ function makeMat(matId) {
   function applyState(data) {
     if (data.name1 !== undefined) state.name1 = data.name1;
     if (data.name2 !== undefined) state.name2 = data.name2;
-    if (data.school1 !== undefined) state.school1 = data.school1;
-    if (data.school2 !== undefined) state.school2 = data.school2;
+    if (data.school1 !== undefined) { state.school1 = data.school1; state.short1 = data.short1 || ''; }
+    if (data.school2 !== undefined) { state.school2 = data.school2; state.short2 = data.short2 || ''; }
     if (data.color1 !== undefined) state.color1 = data.color1;
     if (data.color2 !== undefined) state.color2 = data.color2;
     if (data.pts1 !== undefined) state.pts1 = parseInt(data.pts1)||0;
@@ -281,6 +314,7 @@ function makeMat(matId) {
   });
 
   render();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(render);
   sheetPollInterval = setInterval(pollSheet, 2000);
   pollSheet();
   connectWS();
