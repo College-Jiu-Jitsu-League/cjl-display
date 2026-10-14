@@ -209,6 +209,36 @@
   <div class="el" id="match_counter">Match 1 of 5</div>
 
 <script>
+/* Short team names: the full name is shown unless it doesn't fit its box,
+   then the short name from Tournament Info (e.g. "BU") is used instead. */
+function cjlTextWidth(text, cs) {
+  var c = window.__cjlCanvas || (window.__cjlCanvas = document.createElement('canvas'));
+  var ctx = c.getContext('2d');
+  ctx.font = cs.fontStyle + ' ' + cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily;
+  var t = cs.textTransform === 'uppercase' ? String(text).toUpperCase() : String(text);
+  return ctx.measureText(t).width + (parseFloat(cs.letterSpacing) || 0) * t.length;
+}
+function cjlFitText(el, full, short) {
+  if (typeof el === 'string') el = document.getElementById(el);
+  if (!el) return;
+  full = full == null ? '' : String(full);
+  el.textContent = full;
+  if (!short || short === full) return;
+  var cs = getComputedStyle(el), box = el.clientWidth || parseFloat(cs.width) || 0;
+  if (box > 0 && cjlTextWidth(full, cs) > box + 1) el.textContent = short;
+}
+/* For names that are auto-shrunk: use the short name if the full one would
+   have to shrink below 75% of its normal size. */
+function cjlPickName(full, short, fontCss, boxWidth, letterSpacing) {
+  full = full == null ? '' : String(full);
+  if (!short || short === full) return full;
+  var c = window.__cjlCanvas || (window.__cjlCanvas = document.createElement('canvas'));
+  var ctx = c.getContext('2d'); ctx.font = fontCss;
+  var w = ctx.measureText(full.toUpperCase()).width + (letterSpacing || 0) * Math.max(0, full.length - 1);
+  return w * 0.75 > boxWidth ? short : full;
+}
+</script>
+<script>
   const SHEET_URL = 'https://script.google.com/macros/s/AKfycbwp2W4G2mYd5cC2e9xBgJ3S_q_3jypZiCpaxI0iF5_1f5XbdLKQQyO65OGZbBScXlddcw/exec';
   const RELAY_URL = 'wss://cjl-relay.onrender.com';
   const matId = 1;
@@ -276,8 +306,8 @@
   function applyState(data) {
     if (data.name1 !== undefined) state.name1 = data.name1;
     if (data.name2 !== undefined) state.name2 = data.name2;
-    if (data.school1 !== undefined) state.school1 = data.school1;
-    if (data.school2 !== undefined) state.school2 = data.school2;
+    if (data.school1 !== undefined) { state.school1 = data.school1; state.short1 = data.short1 || ''; }
+    if (data.school2 !== undefined) { state.school2 = data.school2; state.short2 = data.short2 || ''; }
     if (data.color1 !== undefined) state.color1 = data.color1;
     if (data.color2 !== undefined) state.color2 = data.color2;
     if (data.pts1 !== undefined) state.pts1 = parseInt(data.pts1)||0;
@@ -333,14 +363,14 @@
     document.getElementById('name2').textContent = state.name2;
     autoScaleName('name1', state.name1);
     autoScaleName('name2', state.name2);
-    document.getElementById('school1').textContent = state.school1;
-    document.getElementById('school2').textContent = state.school2;
+    cjlFitText('school1', state.school1, state.short1);
+    cjlFitText('school2', state.school2, state.short2);
     document.getElementById('bar1').style.background = state.color1;
     document.getElementById('bar2').style.background = state.color2;
     document.getElementById('team1_bg').style.background = state.color1;
     document.getElementById('team2_bg').style.background = state.color2;
-    document.getElementById('team1_name').textContent = state.school1;
-    document.getElementById('team2_name').textContent = state.school2;
+    cjlFitText('team1_name', state.school1, state.short1);
+    cjlFitText('team2_name', state.school2, state.short2);
     document.getElementById('pts_red').textContent = state.pts1;
     document.getElementById('pts_blue').textContent = state.pts2;
     document.getElementById('team1_score').textContent = state.teamPts1;
@@ -358,6 +388,7 @@
     el.className = 'el'+(state.timerSeconds<=10?' danger':'');
   }
   render();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(render);
 
   // Boot: start sheet poll immediately, then connect WS (stops poll when ready)
   sheetPollInterval = setInterval(pollSheet, 2000);
