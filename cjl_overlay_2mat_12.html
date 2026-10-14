@@ -158,6 +158,28 @@ function cjlFitText(el, full, short) {
   var cs = getComputedStyle(el), box = el.clientWidth || parseFloat(cs.width) || 0;
   if (box > 0 && cjlTextWidth(full, cs) > box + 1) el.textContent = short;
 }
+/* Line under the athlete's name: always the full school/gym name. If it is
+   too long for its box the text gets smaller (down to 60%) instead of being cut. */
+function cjlFullText(el, full) {
+  if (typeof el === 'string') el = document.getElementById(el);
+  if (!el) return;
+  full = full == null ? '' : String(full);
+  el.textContent = full;
+  el.style.fontSize = '';
+  var cs = getComputedStyle(el), box = el.clientWidth || parseFloat(cs.width) || 0;
+  if (!box) return;
+  var w = cjlTextWidth(full, cs);
+  if (w > box + 1) {
+    var base = parseFloat(cs.fontSize);
+    el.style.fontSize = Math.max(base * 0.6, Math.floor(base * box / w * 10) / 10) + 'px';
+  }
+}
+/* Team score boxes: always the short name when the team has one (BU, Columbia…). */
+function cjlTeamText(el, full, short) {
+  if (typeof el === 'string') el = document.getElementById(el);
+  if (!el) return;
+  el.textContent = short ? String(short) : (full == null ? '' : String(full));
+}
 /* For names that are auto-shrunk: use the short name if the full one would
    have to shrink below 75% of its normal size. */
 function cjlPickName(full, short, fontCss, boxWidth, letterSpacing) {
@@ -205,8 +227,8 @@ function makeMat(matId) {
     var n1w = matId===1 ? 250 : 213;
     var n2w = matId===1 ? 215 : 245;
     var big = "900 50px 'Barlow Condensed', sans-serif";
-    var team1 = cjlPickName(state.school1, state.short1, big, n1w, 1.5);
-    var team2 = cjlPickName(state.school2, state.short2, big, n2w, 1.5);
+    var team1 = state.short1 || state.school1;
+    var team2 = state.short2 || state.school2;
     document.getElementById(p+'name1').textContent = team1;
     document.getElementById(p+'name2').textContent = team2;
     autoScaleName(p+'name1', team1, 50, 20, n1w);
@@ -217,10 +239,10 @@ function makeMat(matId) {
     document.getElementById(p+'slash2').style.color = state.color2;
 
     document.getElementById(p+'name_a').textContent = state.name1;
-    cjlFitText(p+'school_a', state.school1, state.short1);
+    cjlFullText(p+'school_a', state.school1);
     document.getElementById(p+'bar_a').style.background = state.color1;
     document.getElementById(p+'name_b').textContent = state.name2;
-    cjlFitText(p+'school_b', state.school2, state.short2);
+    cjlFullText(p+'school_b', state.school2);
     document.getElementById(p+'bar_b').style.background = state.color2;
     autoScaleName(p+'name_a', state.name1, 30, 16, 220);
     autoScaleName(p+'name_b', state.name2, 30, 16, 230);
