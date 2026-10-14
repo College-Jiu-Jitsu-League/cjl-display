@@ -277,7 +277,7 @@ function makeBoutCard(bout, boutName) {
       <span class="bout-team-name${w===t2?' winner':''}${tbd2?' tbd':''}">${t2||'TBD'}</span>
       <span class="bout-team-score">${s2}</span>
     </div>
-    ${bout && bout.status==='Complete' ? `<div class="result-tag">✓ ${w} wins</div>` : ''}
+    ${bout && bout.status==='Complete' ? `<div class="result-tag">✓ ${w} wins${bout.resultType==='Tiebreaker' ? ' on tiebreaker' : ''}</div>` : ''}
   `;
   return card;
 }
