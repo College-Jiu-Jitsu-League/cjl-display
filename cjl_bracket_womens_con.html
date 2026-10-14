@@ -46,6 +46,37 @@ html,body{width:1920px;height:1080px;background:#0f1117;font-family:'Barlow Cond
 .super-team-name.tbd{color:#555;font-style:italic;font-weight:400;}
 .super-team-score{font-size:28px;font-weight:900;color:#fff;}
 .super-result{font-size:10px;color:#27ae60;letter-spacing:1px;padding:8px 16px;text-transform:uppercase;font-family:'Barlow',sans-serif;border-top:1px solid #22263a;}
+/* Compact cards for big brackets / round robins */
+.dense .bout{margin:3px 0;}
+.dense .bout-header{padding:3px 10px 2px;}
+.dense .bout-team{padding:4px 10px;}
+.dense .bout-team-name{font-size:14px;}
+.dense .bout-team-score{font-size:15px;}
+.dense .result-tag{display:none;}
+.dense .round{min-width:0;}
+.empty-note{margin:auto;font-size:22px;color:#8890aa;letter-spacing:2px;text-transform:uppercase;font-family:'Barlow',sans-serif;}
+/* Round labels pinned to the top of each column so they line up whatever the bout count */
+.round{padding-top:34px;}
+.round > .round-label{position:absolute;top:0;left:0;right:0;}
+/* Round robin views (used automatically when the division is a round robin) */
+.rr-wrap{flex:1;display:flex;gap:40px;align-items:flex-start;min-height:0;}
+.rr-table{flex:1;border-collapse:separate;border-spacing:0 8px;font-family:'Barlow Condensed',sans-serif;}
+.rr-table th{font-size:13px;color:#8890aa;letter-spacing:2px;text-transform:uppercase;font-family:'Barlow',sans-serif;font-weight:600;text-align:center;padding:0 14px 4px;}
+.rr-table th.l,.rr-table td.l{text-align:left;}
+.rr-table td{background:#3d455e;padding:14px;text-align:center;font-size:30px;font-weight:700;color:#ddd;border-top:1px solid #2e3350;border-bottom:1px solid #2e3350;}
+.rr-table td:first-child{border-left:1px solid #2e3350;border-radius:8px 0 0 8px;width:80px;color:#8890aa;}
+.rr-table td:last-child{border-right:1px solid #2e3350;border-radius:0 8px 8px 0;}
+.rr-table td.team{font-size:34px;font-weight:900;color:#fff;}
+.rr-table tr.lead td{background:linear-gradient(90deg,#1a2a4a,#2c3e6b);border-color:#3d5af1;}
+.rr-side{width:420px;display:flex;flex-direction:column;gap:20px;}
+.rr-progress{background:#1a1d27;border:1px solid #2e3350;border-radius:8px;padding:16px 20px;font-size:18px;color:#ccc;letter-spacing:1px;}
+.rr-progress b{color:#fff;font-size:26px;}
+.rr-note{font-size:13px;color:#8890aa;font-family:'Barlow',sans-serif;line-height:1.5;}
+.rr-grid{flex:1;display:flex;gap:18px;align-items:stretch;min-height:0;}
+.rr-grid .round{flex:1;min-width:0;justify-content:flex-start;}
+.rr-grid .bout{min-width:0;}
+.rr-grid .bout-team-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.rr-bye{font-size:11px;color:#8890aa;text-align:center;font-family:'Barlow',sans-serif;letter-spacing:1px;text-transform:uppercase;margin-top:6px;}
 </style>
 </head>
 <body>
@@ -61,6 +92,7 @@ html,body{width:1920px;height:1080px;background:#0f1117;font-family:'Barlow Cond
   </div>
   <div class="bracket-container" id="bracket"></div>
 </div>
+<script src="cjl_rr.js"></script>
 <script>
 
 const SHEET_URL = 'https://script.google.com/macros/s/AKfycbwp2W4G2mYd5cC2e9xBgJ3S_q_3jypZiCpaxI0iF5_1f5XbdLKQQyO65OGZbBScXlddcw/exec';
@@ -117,15 +149,20 @@ const TITLE = "WOMEN'S 3-ON-3 — CONSOLATION BRACKET";
 const PLACE_LABEL = '3rd / 4th';
 const IS_CHAMP = false;
 const IS_SUPER = false;
+const DIVISION = "Women's";
+const RR_VIEW = 'results';
 
 let allBouts = [];
 
 async function loadBracket() {
   try {
     const res = await fetch(SHEET_URL + '?action=getBracket', {redirect:'follow'});
-    allBouts = JSON.parse(await res.text());
+    const data = JSON.parse(await res.text());
+    if (!Array.isArray(data)) throw new Error('bad data');
+    allBouts = data;
     renderBracket();
   } catch(e) {
+    if (allBouts.length) return;   // keep showing the last good bracket
     document.getElementById('bracket').innerHTML = '<div style="color:#e24b4a;font-size:18px;margin:auto;">Connection error — retrying...</div>';
   }
 }
@@ -135,6 +172,11 @@ function renderBracket() {
   const container = document.getElementById('bracket');
   container.innerHTML = '';
 
+  if (!IS_SUPER && window.CJLRR && CJLRR.isRoundRobin(allBouts, DIVISION)) {
+    renderRoundRobin(container);
+    return;
+  }
+
   if (IS_SUPER) {
     renderSupermatches(container);
     return;
@@ -143,7 +185,19 @@ function renderBracket() {
   container.style.display = 'flex';
   container.style.alignItems = 'stretch';
 
-  ROUNDS.forEach((round, ri) => {
+  // Rounds come from the bout notes (works for the 8-team bracket and the
+  // 6-team bracket with byes); the hard-coded ROUNDS are only a fallback.
+  const derived = window.CJLRR ? CJLRR.bracketRounds(allBouts, DIVISION, IS_CHAMP ? 'champ' : 'con') : [];
+  if (!derived.length && window.CJLRR && CJLRR.hasDivision(allBouts, DIVISION)) {
+    // e.g. a 2- or 3-team bracket has no placement bouts
+    container.innerHTML = '<div class="empty-note">No ' + (IS_CHAMP ? 'bracket' : 'placement') + ' bouts in this format.</div>';
+    return;
+  }
+  const activeRounds = derived.length ? derived : ROUNDS;
+  // Big brackets (16 teams → 8 bouts in round 1): compact cards so they fit 1080p.
+  container.classList.toggle('dense', Math.max.apply(null, activeRounds.map(r => r.bouts.length)) > 4);
+
+  activeRounds.forEach((round, ri) => {
     if (ri > 0) {
       const conn = document.createElement('div');
       conn.className = 'conn';
@@ -165,7 +219,7 @@ function renderBracket() {
   });
 
   // Final placement box
-  const finalRound = ROUNDS[ROUNDS.length - 1];
+  const finalRound = activeRounds[activeRounds.length - 1];
   const finalBout = allBouts.find(b => b.bout === finalRound.bouts[0]);
   if (finalBout && finalBout.winner) {
     const conn = document.createElement('div');
@@ -218,6 +272,15 @@ function makeSuperCard(bout, boutName) {
   return card;
 }
 
+// Long school names: the short name from Tournament Info on compact (big)
+// brackets or when the full name is long.
+function shortIfLong(t, short) {
+  if (!short || short === t) return t;
+  return (t.length > 18 || document.querySelector('.dense')) ? short : t;
+}
+
+function phLabel(t) { return window.CJLRR ? CJLRR.placeholderLabel(t) : (t || 'TBD'); }
+
 function makeBoutCard(bout, boutName) {
   const card = document.createElement('div');
   card.className = 'bout' + (bout && bout.status==='Complete' ? ' complete' : '');
@@ -231,16 +294,68 @@ function makeBoutCard(bout, boutName) {
   card.innerHTML = `
     <div class="bout-header">${boutName}</div>
     <div class="bout-team${w===t1?' winner':''}">
-      <span class="bout-team-name${w===t1?' winner':''}${tbd1?' tbd':''}">${t1||'TBD'}</span>
+      <span class="bout-team-name${w===t1?' winner':''}${tbd1?' tbd':''}">${tbd1 ? phLabel(t1) : shortIfLong(t1, bout && bout.team1Short)}</span>
       <span class="bout-team-score">${s1}</span>
     </div>
     <div class="bout-team${w===t2?' winner':''}">
-      <span class="bout-team-name${w===t2?' winner':''}${tbd2?' tbd':''}">${t2||'TBD'}</span>
+      <span class="bout-team-name${w===t2?' winner':''}${tbd2?' tbd':''}">${tbd2 ? phLabel(t2) : shortIfLong(t2, bout && bout.team2Short)}</span>
       <span class="bout-team-score">${s2}</span>
     </div>
-    ${bout && bout.status==='Complete' ? `<div class="result-tag">✓ ${w} wins</div>` : ''}
+    ${bout && bout.status==='Complete' ? `<div class="result-tag">✓ ${shortIfLong(w, w===t1 ? bout.team1Short : bout.team2Short)} wins${bout.resultType==='Tiebreaker' ? ' on tiebreaker' : ''}</div>` : ''}
   `;
   return card;
+}
+
+// ── Round robin ─────────────────────────────────────────────────────────────
+// When this division is set up as a round robin in the Sheet, this page shows
+// RR_VIEW instead of a bracket: 'standings' (championship pages) or 'results'
+// (consolation pages). Nothing to change in OBS.
+function renderRoundRobin(container) {
+  const R = window.CJLRR, esc = R.esc;
+  const base = TITLE.split(' — ')[0];
+  container.innerHTML = '';
+  container.style.display = 'flex';
+  container.style.alignItems = 'stretch';
+  const rounds = R.rounds(allBouts, DIVISION);
+  container.classList.toggle('dense', rounds.some(r => r.bouts.length > 4) || rounds.length > 7);
+  const fin = R.finalBout(allBouts, DIVISION);
+  const rrBouts = rounds.filter(r => r.label !== 'Final').reduce((a, r) => a.concat(r.bouts), []);
+  const played = rrBouts.filter(b => b.status === 'Complete').length;
+
+  if (RR_VIEW === 'standings') {
+    document.getElementById('title').textContent = base + ' — STANDINGS';
+    const table = R.standings(allBouts, DIVISION);
+    const champ = R.champion(allBouts, DIVISION);
+    const rows = table.map((t, i) => `<tr class="${i === 0 && t.wins > 0 ? 'lead' : ''}">
+        <td>${t.rank}</td><td class="l team">${esc(t.name)}</td><td>${t.wins}</td><td>${t.losses}</td>
+        <td>${t.ptsFor}</td><td>${t.diff > 0 ? '+' : ''}${t.diff}</td></tr>`).join('');
+    let side = '';
+    if (champ) {
+      side += `<div class="champion-box"><div class="champion-trophy">🏆</div><div class="champion-label">Champion</div><div class="champion-name">${esc(champ)}</div></div>`;
+    } else if (fin) {
+      side += `<div class="round-label" style="margin-bottom:0">Final</div>`;
+      side += makeBoutCard(fin, fin.bout).outerHTML;
+    }
+    side += `<div class="rr-progress"><b>${played}</b> / ${rrBouts.length} round robin bouts complete</div>`;
+    side += `<div class="rr-note">Ranked by dual wins, then head-to-head, then team points scored, then team-point difference.${fin ? ' Top two meet in the final.' : ''}</div>`;
+    container.innerHTML = `<div class="rr-wrap"><table class="rr-table"><thead><tr><th>#</th><th class="l">Team</th><th>W</th><th>L</th><th>Team Pts</th><th>Diff</th></tr></thead><tbody>${rows}</tbody></table><div class="rr-side">${side}</div></div>`;
+    return;
+  }
+
+  document.getElementById('title').textContent = base + ' — ROUND ROBIN RESULTS';
+  const grid = document.createElement('div');
+  grid.className = 'rr-grid';
+  rounds.forEach(r => {
+    const col = document.createElement('div');
+    col.className = 'round';
+    const label = document.createElement('div');
+    label.className = 'round-label';
+    label.textContent = r.label;
+    col.appendChild(label);
+    r.bouts.forEach(b => col.appendChild(makeBoutCard(b, b.bout)));
+    grid.appendChild(col);
+  });
+  container.appendChild(grid);
 }
 
 loadBracket();
