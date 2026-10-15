@@ -35,7 +35,7 @@ html,body{width:1920px;height:1080px;background:#0f1117;font-family:'Barlow Cond
 .place-name{font-size:18px;font-weight:700;color:#ccc;}
 .conn{position:relative;min-width:40px;display:flex;flex-direction:column;justify-content:space-around;}
 /* Supermatches layout */
-.super-grid{flex:1;display:grid;grid-template-columns:repeat(3,1fr);gap:40px;align-items:center;}
+.super-grid{flex:1;display:grid;grid-template-columns:repeat(3,1fr);gap:40px;align-content:center;align-items:start;}
 .super-card{background:#3d455e;border:1px solid #2e3350;border-radius:12px;overflow:hidden;}
 .super-card.complete{border-color:#27ae60;}
 .super-title{font-size:11px;color:#8890aa;letter-spacing:2px;text-transform:uppercase;padding:12px 16px 8px;background:#16182a;font-family:'Barlow',sans-serif;}
@@ -50,6 +50,17 @@ html,body{width:1920px;height:1080px;background:#0f1117;font-family:'Barlow Cond
 .super-athlete-name{font-size:22px;font-weight:900;color:#ccc;line-height:1.1;}
 .super-athlete-name.winner{color:#fff;}
 .super-team-label{font-size:11px;color:#8890aa;letter-spacing:1px;text-transform:uppercase;font-family:'Barlow',sans-serif;}
+.super-dense{gap:18px;align-content:center;}
+.super-dense .super-title{padding:8px 12px 5px;}
+.super-dense .super-team{padding:8px 12px;}
+.super-dense .super-athlete-name,.super-dense .super-team-name{font-size:18px;}
+.super-dense .super-team-score{font-size:20px;}
+.super-dense .super-result{padding:5px 12px;}
+.super-xdense{gap:12px;}
+.super-xdense .super-athlete-name,.super-xdense .super-team-name{font-size:15px;}
+.super-xdense .super-result{display:none;}
+.empty-note{margin:auto;font-size:22px;color:#8890aa;letter-spacing:2px;text-transform:uppercase;font-family:'Barlow',sans-serif;}
+.bracket-container{display:flex;}
 </style>
 </head>
 <body>
@@ -197,11 +208,18 @@ function renderBracket() {
 }
 
 function renderSupermatches(container) {
-  container.className = 'super-grid';
-  ['Super 1','Super 2','Super 3'].forEach(boutName => {
-    const bout = allBouts.find(b => b.bout === boutName);
-    container.appendChild(makeSuperCard(bout, boutName));
-  });
+  // Only supermatches that have been fought, in bout order.
+  const done = allBouts.filter(b => b.division === 'Supermatch' && b.status === 'Complete')
+    .sort((a, b) => (parseInt(String(a.bout).replace(/\D/g, ''), 10) || 0) - (parseInt(String(b.bout).replace(/\D/g, ''), 10) || 0));
+  if (!done.length) {
+    container.className = 'bracket-container';
+    container.innerHTML = '<div class="empty-note">No supermatches yet — results appear here as they finish.</div>';
+    return;
+  }
+  const n = done.length, cols = n <= 3 ? n : n <= 8 ? 4 : n <= 15 ? 5 : 6;
+  container.className = 'super-grid' + (n > 8 ? ' super-dense' : '') + (n > 15 ? ' super-xdense' : '');
+  container.style.gridTemplateColumns = 'repeat(' + cols + ',1fr)';
+  done.forEach(b => container.appendChild(makeSuperCard(b, b.bout)));
 }
 
 function makeSuperCard(bout, boutName) {
