@@ -313,7 +313,7 @@ let timerInterval=null,undoStack=[],actionLog=[],matchResults=[],matchLog=[],sel
 const fmtClock=s=>Math.floor(s/60)+':'+(s%60).toString().padStart(2,'0');
 const TP={submission:5,dq:5,forfeit:5,tech:4,stoppage:5,decision:3,referee:2};
 
-function setMat(id){matId=id;[1,2,3,4].forEach(i=>document.getElementById('mat-btn-'+i).classList.toggle('active',i===id));if(tryRestoreFromLS(id)){document.getElementById('boutSelect').value=state.boutNum;document.getElementById('lineupGrid').style.display='none';document.getElementById('confirmLineupBtn').style.display='none';updateMatchResultsLog();buildMatchProgress();renderAll();if(state.timerRunning)startTimer();logAction('Switched to Mat '+id+' — resumed saved bout.');return;}resetMatchScores();matchResults=[];selectedResult=null;selectedWinner=null;savedLineup=[];state.boutNum='';state.name1='—';state.name2='—';state.school1='—';state.school2='—';document.getElementById('boutSelect').value='';document.getElementById('lineupGrid').style.display='none';document.getElementById('confirmLineupBtn').style.display='none';updateMatchResultsLog();buildMatchProgress();renderAll();pushLS();logAction('Switched to Mat '+id);}
+function setMat(id){matId=id;if(relayConnected&&relayWs&&relayWs.readyState===1)relayWs.send(JSON.stringify({type:'controller',mat:id}));[1,2,3,4].forEach(i=>document.getElementById('mat-btn-'+i).classList.toggle('active',i===id));if(tryRestoreFromLS(id)){document.getElementById('boutSelect').value=state.boutNum;document.getElementById('lineupGrid').style.display='none';document.getElementById('confirmLineupBtn').style.display='none';updateMatchResultsLog();buildMatchProgress();renderAll();if(state.timerRunning)startTimer();logAction('Switched to Mat '+id+' — resumed saved bout.');return;}resetMatchScores();matchResults=[];selectedResult=null;selectedWinner=null;savedLineup=[];state.boutNum='';state.name1='—';state.name2='—';state.school1='—';state.school2='—';document.getElementById('boutSelect').value='';document.getElementById('lineupGrid').style.display='none';document.getElementById('confirmLineupBtn').style.display='none';updateMatchResultsLog();buildMatchProgress();renderAll();pushLS();logAction('Switched to Mat '+id);}
 // GET from the Apps Script. Throws on network/script errors so callers can retry
 // instead of silently working with an empty bracket.
 async function sheetGet(action,params={}){let url=SHEET_URL+'?action='+encodeURIComponent(action);Object.entries(params).forEach(([k,v])=>{url+='&'+encodeURIComponent(k)+'='+encodeURIComponent(v);});const res=await fetch(url,{redirect:'follow'});const text=await res.text();let data;try{data=JSON.parse(text);}catch(e){throw new Error('Sheet returned an unreadable reply for '+action);}if(data&&!Array.isArray(data)&&data.error)throw new Error(data.error);return data;}
@@ -477,6 +477,7 @@ function connectRelay() {
     relayWs.onopen = () => {
       relayConnected = true;
       relayWs.send(JSON.stringify({ type: 'join', mat: matId }));
+      relayWs.send(JSON.stringify({ type: 'controller', mat: matId }));   // the public page shows only mats being run
       setRelayStatus(true);
     };
     relayWs.onmessage = (e) => {
