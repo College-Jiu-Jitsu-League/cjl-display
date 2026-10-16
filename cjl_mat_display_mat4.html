@@ -108,6 +108,86 @@ function cjlMakeClock() {
 <script>
 /* Short team names: the full name is shown unless it doesn't fit its box,
    then the short name from Tournament Info (e.g. "BU") is used instead. */
+/* Name fitting: measures the real rendered text (font, caps, letter-spacing).
+   Shrinks to a readable minimum, then tries shorter forms (short name, or
+   "J. Smith" for athletes), and only as a last resort ends with "…" —
+   never cuts a letter in half. Re-fits when the web fonts finish loading. */
+var __cjlFitMemo = {};
+function cjlMeasure(text, el) {
+  var s = window.__cjlMeasureSpan;
+  if (!s) {
+    s = document.createElement('span');
+    s.style.cssText = 'position:absolute;left:-9999px;top:-9999px;visibility:hidden;white-space:nowrap;padding:0;border:0;';
+    document.body.appendChild(s); window.__cjlMeasureSpan = s;
+  }
+  var cs = getComputedStyle(el);
+  s.style.fontFamily = cs.fontFamily; s.style.fontWeight = cs.fontWeight;
+  s.style.fontStyle = cs.fontStyle; s.style.fontSize = cs.fontSize;
+  s.style.letterSpacing = cs.letterSpacing; s.style.textTransform = cs.textTransform;
+  s.style.fontStretch = cs.fontStretch;
+  s.textContent = text;
+  return s.offsetWidth;
+}
+function cjlNameAlts(name) {
+  var p = String(name || '').trim().split(/\s+/);
+  if (p.length < 2) return [];
+  var i = p[0].charAt(0) + '. ';
+  return [i + p.slice(1).join(' '), i + p[p.length - 1], p[p.length - 1]];
+}
+function cjlFitEl(el, text, opt) {
+  if (typeof el === 'string') el = document.getElementById(el);
+  if (!el) return;
+  opt = opt || {};
+  text = text == null ? '' : String(text);
+  if (el.id) __cjlFitMemo[el.id] = { t: text, o: opt };
+  el.style.fontSize = opt.max ? opt.max + 'px' : '';
+  el.textContent = text;
+  var box = (opt.box || el.clientWidth) - 2;
+  if (box <= 0 || !text) return;
+  var base = parseFloat(getComputedStyle(el).fontSize);
+  var min = Math.min(base, Math.max(opt.min || 0, base * (opt.minRatio || 0.8)));
+  var seen = {}, cands = [text].concat(opt.alts || []).filter(function (c) {
+    c = String(c || '').trim(); if (!c || seen[c]) return false; seen[c] = 1; return true;
+  });
+  for (var i = 0; i < cands.length; i++) {
+    var t = cands[i];
+    el.style.fontSize = base + 'px';
+    var w = cjlMeasure(t, el);
+    if (w <= box) { el.textContent = t; return; }
+    var size = Math.floor(base * box / w * 2) / 2;
+    if (size < min) continue;
+    el.style.fontSize = size + 'px';
+    while (size > min && cjlMeasure(t, el) > box) { size -= 0.5; el.style.fontSize = size + 'px'; }
+    if (cjlMeasure(t, el) <= box) { el.textContent = t; return; }
+  }
+  /* Still too long: allow down to 65% for the shortest form before using "…". */
+  var floor = Math.min(min, base * 0.65), last = cands[cands.length - 1];
+  var tries = cands.length > 1 ? cands.slice(1) : cands;
+  for (var j = 0; j < tries.length; j++) {
+    el.style.fontSize = base + 'px';
+    var fs = Math.max(floor, Math.floor(base * box / cjlMeasure(tries[j], el) * 2) / 2);
+    el.style.fontSize = fs + 'px';
+    while (fs > floor && cjlMeasure(tries[j], el) > box) { fs -= 0.5; el.style.fontSize = fs + 'px'; }
+    if (cjlMeasure(tries[j], el) <= box) { el.textContent = tries[j]; return; }
+  }
+  while (last.length > 1 && cjlMeasure(last + '…', el) > box) last = last.slice(0, -1).replace(/\s+$/, '');
+  el.textContent = last + '…';
+}
+(function () {
+  if (!document.fonts) return;
+  var refit = function () { for (var id in __cjlFitMemo) cjlFitEl(id, __cjlFitMemo[id].t, __cjlFitMemo[id].o); };
+  if (document.fonts.ready) document.fonts.ready.then(refit);
+  if (document.fonts.addEventListener) document.fonts.addEventListener('loadingdone', refit);
+})();
+/* Line under the athlete's name: the full school/gym name, shrunk at most to
+   80%; if it still doesn't fit, the short name. */
+function cjlFullText(el, full, short) {
+  cjlFitEl(el, full, { minRatio: 0.8, alts: short ? [short] : [] });
+}
+/* Team score boxes: always the short name when the team has one (BU, HCSC…). */
+function cjlTeamText(el, full, short) {
+  cjlFitEl(el, short ? short : full, { minRatio: 0.8 });
+}
 function cjlTextWidth(text, cs) {
   var c = window.__cjlCanvas || (window.__cjlCanvas = document.createElement('canvas'));
   var ctx = c.getContext('2d');
@@ -124,28 +204,8 @@ function cjlFitText(el, full, short) {
   var cs = getComputedStyle(el), box = el.clientWidth || parseFloat(cs.width) || 0;
   if (box > 0 && cjlTextWidth(full, cs) > box + 1) el.textContent = short;
 }
-/* Line under the athlete's name: always the full school/gym name. If it is
-   too long for its box the text gets smaller (down to 60%) instead of being cut. */
-function cjlFullText(el, full) {
-  if (typeof el === 'string') el = document.getElementById(el);
-  if (!el) return;
-  full = full == null ? '' : String(full);
-  el.textContent = full;
-  el.style.fontSize = '';
-  var cs = getComputedStyle(el), box = el.clientWidth || parseFloat(cs.width) || 0;
-  if (!box) return;
-  var w = cjlTextWidth(full, cs);
-  if (w > box + 1) {
-    var base = parseFloat(cs.fontSize);
-    el.style.fontSize = Math.max(base * 0.6, Math.floor(base * box / w * 10) / 10) + 'px';
-  }
-}
-/* Team score boxes: always the short name when the team has one (BU, Columbia…). */
-function cjlTeamText(el, full, short) {
-  if (typeof el === 'string') el = document.getElementById(el);
-  if (!el) return;
-  el.textContent = short ? String(short) : (full == null ? '' : String(full));
-}
+
+
 /* For names that are auto-shrunk: use the short name if the full one would
    have to shrink below 75% of its normal size. */
 function cjlPickName(full, short, fontCss, boxWidth, letterSpacing) {
@@ -272,8 +332,8 @@ function cjlPickName(full, short, fontCss, boxWidth, letterSpacing) {
   function render() {
     document.getElementById('name1').textContent = state.name1;
     document.getElementById('name2').textContent = state.name2;
-    cjlFullText('school1', state.school1);
-    cjlFullText('school2', state.school2);
+    cjlFullText('school1', state.school1, state.short1);
+    cjlFullText('school2', state.school2, state.short2);
     document.getElementById('pts1').textContent = state.pts1;
     document.getElementById('pts2').textContent = state.pts2;
     cjlTeamText('tn1', state.school1, state.short1);
