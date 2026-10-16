@@ -140,6 +140,31 @@ html, body {
 <div id="m4_pts_blue" class="el pts-circle" style="left:1788px; width:70px;"></div>
 
 <script>
+/* Smooth mat clock. Each display runs its own clock, anchored to the control
+   panel's time; it only re-syncs when it is more than 1.5 s off, so network
+   jitter never makes the numbers stutter or jump back. Sheet updates (only used
+   when the relay is down) are up to 15 s old, so they can only move it forward. */
+function cjlMakeClock() {
+  var c = { running: false, end: 0, left: 300000 };
+  c.ms = function () { return c.running ? Math.max(0, c.end - Date.now()) : c.left; };
+  c.secs = function () { return Math.ceil(c.ms() / 1000); };
+  c.update = function (data, fromSheet) {
+    if (!data) return;
+    var ms = data.timerMs !== undefined && data.timerMs !== '' && data.timerMs !== null ? Number(data.timerMs)
+           : data.timerSeconds !== undefined && data.timerSeconds !== '' ? parseInt(data.timerSeconds, 10) * 1000 : NaN;
+    if (isNaN(ms)) return;                      // nothing about the clock in this message
+    ms = Math.max(0, ms);
+    var running = data.timerRunning === true || data.timerRunning === 'true';
+    if (!running) { c.running = false; c.left = ms; return; }
+    var shown = c.ms();
+    if (!c.running) { c.running = true; c.end = Date.now() + ms; return; }
+    if (fromSheet && ms > shown) return;         // stale sheet value
+    if (Math.abs(ms - shown) > 1500) c.end = Date.now() + ms;
+  };
+  return c;
+}
+</script>
+<script>
 /* Short team names: the full name is shown unless it doesn't fit its box,
    then the short name from Tournament Info (e.g. "BU") is used instead. */
 function cjlTextWidth(text, cs) {
@@ -277,7 +302,9 @@ function makeMat(matId) {
   }
   function stopTimer() { clearInterval(timerInterval); timerInterval=null; }
 
-  function applyState(data) {
+  var clock = cjlMakeClock();
+  setInterval(function () { var t = clock.secs(); if (t !== state.timerSeconds) { state.timerSeconds = t; renderTimer(); } }, 200);
+  function applyState(data, fromSheet) {
     if (data.name1 !== undefined) state.name1 = data.name1;
     if (data.name2 !== undefined) state.name2 = data.name2;
     if (data.school1 !== undefined) { state.school1 = data.school1; state.short1 = data.short1 || ''; }
@@ -290,10 +317,7 @@ function makeMat(matId) {
     if (data.teamPts2 !== undefined) state.teamPts2 = parseInt(data.teamPts2)||0;
     if (data.mode !== undefined) state.mode = data.mode;
     if (data.matchNum !== undefined) state.matchNum = parseInt(data.matchNum)||1;
-    var ns = parseInt(data.timerSeconds)||300;
-    var nr = data.timerRunning==='true'||data.timerRunning===true;
-    if (Math.abs(ns - lastTimerSeconds) > 1) { state.timerSeconds=ns; } lastTimerSeconds=ns;
-    if (nr !== lastTimerRunning) { lastTimerRunning=nr; if (nr) startTimer(); else stopTimer(); }
+    clock.update(data, fromSheet); state.timerSeconds = clock.secs();
     render();
   }
 
@@ -325,7 +349,7 @@ function makeMat(matId) {
     try {
       const res = await fetch(SHEET_URL + '?action=getMatch&mat=' + matId, {redirect:'follow'});
       const data = JSON.parse(await res.text());
-      applyState(data);
+      applyState(data, true);
     } catch(e) {}
   }
 
